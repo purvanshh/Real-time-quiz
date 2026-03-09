@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: real-time-quiz
+    runtime: node
+    buildCommand: npm run build
+    startCommand: npm start
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+      - key: ADMIN_SECRET
+        sync: false

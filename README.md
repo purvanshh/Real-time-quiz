@@ -137,6 +137,20 @@ real-time-quiz-website/
 | `launch-success` | `{ message }` | Admin: launch confirmed |
 | `launch-error` | `{ message }` | Admin: launch failed |
 
+## Deployment
+
+This app uses a **custom server with Socket.io** and is **not compatible with Vercel** (serverless). Use platforms that support Node.js servers:
+
+- **Railway** (recommended)
+- **Render**
+- **Fly.io**
+
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for step-by-step instructions.
+
+**Build command:** `npm run build`  
+**Start command:** `npm start`  
+*(Do not use `npm run dev` for production.)*
+
 ## License
 
 MIT
