@@ -12,9 +12,18 @@ interface RankingUser {
   score: number;
 }
 
+interface Problem {
+  question?: string;
+  answer?: string;
+  type?: "text" | "multiple_choice";
+  options?: string[];
+}
+
 export default function Question() {
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
+  const [problemType, setProblemType] = useState<"text" | "multiple_choice">("text");
+  const [problemOptions, setProblemOptions] = useState<string[]>([]);
   const [isWaiting, setIsWaiting] = useState(true);
   const [user, setUser] = useState("");
   const [isLogin, setIsLogin] = useState(false);
@@ -36,6 +45,12 @@ export default function Question() {
     e.preventDefault();
     if (!answer.trim() || isWaiting) return;
     socket.emit("submit-answer", { answer: answer.trim(), userId: user });
+    setAnswer("");
+  };
+
+  const handleOptionSelect = (selectedAnswer: string) => {
+    if (isWaiting) return;
+    socket.emit("submit-answer", { answer: selectedAnswer, userId: user });
     setAnswer("");
   };
 
@@ -94,9 +109,12 @@ export default function Question() {
     }
 
     // Listen for quiz questions and winner announcements
-    socket.on("new-problem", (problem) => {
+    socket.on("new-problem", (problem: Problem) => {
       setQuestion(problem?.question ?? "");
       setIsWaiting(problem?.answer === "__waiting__");
+      setProblemType(problem?.type ?? "text");
+      setProblemOptions(problem?.options ?? []);
+      setAnswer("");
     });
 
     // Request current problem in case we missed the initial emit (race condition on connect)
@@ -111,6 +129,11 @@ export default function Question() {
       showToast("Incorrect answer — try again!", "error");
     });
 
+    socket.on("scores-reset", () => {
+      updateRanking();
+      showToast("New competition started! Scores have been reset.", "info");
+    });
+
     // Load leaderboard on mount
     updateRanking();
 
@@ -118,6 +141,7 @@ export default function Question() {
       socket.off("new-problem");
       socket.off("winner");
       socket.off("wrong-answer");
+      socket.off("scores-reset");
       socket.disconnect();
       document.body.style.overflow = "auto";
     };
@@ -195,24 +219,46 @@ export default function Question() {
             <p className="mb-6 text-2xl font-semibold text-foreground">
               {question || "Waiting for the host to begin..."}
             </p>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <input
-                type="text"
-                placeholder="Your answer"
-                value={answer}
-                onChange={(e) => setAnswer(e.target.value)}
-                disabled={isWaiting}
-                className="w-full rounded-lg border border-input bg-background px-4 py-3 text-lg text-foreground placeholder:text-muted-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
-                required={!isWaiting}
-              />
-              <button
-                type="submit"
-                disabled={isWaiting}
-                className="w-full rounded-lg bg-primary py-3 font-semibold text-primary-foreground shadow-md transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {isWaiting ? "Waiting for question..." : "Submit Answer"}
-              </button>
-            </form>
+            {problemType === "multiple_choice" && problemOptions.length >= 2 ? (
+              <div className="space-y-3">
+                <p className="mb-3 text-sm font-medium text-muted-foreground">Choose your answer:</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {problemOptions.map((opt, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      disabled={isWaiting}
+                      onClick={() => handleOptionSelect(opt)}
+                      className="rounded-lg border border-input bg-background px-4 py-3 text-left text-lg font-medium text-foreground transition hover:border-primary hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <span className="mr-2 font-semibold text-muted-foreground">
+                        {String.fromCharCode(65 + i)})
+                      </span>
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <input
+                  type="text"
+                  placeholder="Your answer"
+                  value={answer}
+                  onChange={(e) => setAnswer(e.target.value)}
+                  disabled={isWaiting}
+                  className="w-full rounded-lg border border-input bg-background px-4 py-3 text-lg text-foreground placeholder:text-muted-foreground outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  required={!isWaiting}
+                />
+                <button
+                  type="submit"
+                  disabled={isWaiting}
+                  className="w-full rounded-lg bg-primary py-3 font-semibold text-primary-foreground shadow-md transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isWaiting ? "Waiting for question..." : "Submit Answer"}
+                </button>
+              </form>
+            )}
           </div>
         </main>
         <Ranking ranking={ranking} />

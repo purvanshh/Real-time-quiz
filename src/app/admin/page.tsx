@@ -33,6 +33,7 @@ export default function AdminPage() {
       showToast(message, "success");
       setQuestion("");
       setAnswer("");
+      setOptions(["", "", "", ""]);
     });
 
     socket.on("launch-error", ({ message }: { message: string }) => {
@@ -57,15 +58,52 @@ export default function AdminPage() {
       showToast("Enter admin password", "error");
       return;
     }
-    if (!question.trim() || !answer.trim()) {
-      showToast("Question and answer are required", "error");
+    if (!question.trim()) {
+      showToast("Question is required", "error");
       return;
     }
-    socket.emit("launch-question", {
-      question: question.trim(),
-      answer: answer.trim(),
-      adminSecret: adminSecret.trim(),
-    });
+    if (questionType === "text") {
+      if (!answer.trim()) {
+        showToast("Answer is required for text questions", "error");
+        return;
+      }
+      socket.emit("launch-question", {
+        question: question.trim(),
+        answer: answer.trim(),
+        adminSecret: adminSecret.trim(),
+        type: "text",
+      });
+    } else {
+      const validOptions = options.map((o) => o.trim()).filter(Boolean);
+      if (validOptions.length < 2) {
+        showToast("Multiple choice requires at least 2 options", "error");
+        return;
+      }
+      if (!answer.trim()) {
+        showToast("Select the correct answer", "error");
+        return;
+      }
+      socket.emit("launch-question", {
+        question: question.trim(),
+        answer: answer.trim(),
+        adminSecret: adminSecret.trim(),
+        type: "multiple_choice",
+        options: validOptions,
+      });
+    }
+  };
+
+  const handleStartNewCompetition = () => {
+    if (!adminSecret.trim()) return;
+    if (!confirm("Start a new competition? This will reset ALL participant scores to zero.")) return;
+    socket.emit("start-new-competition", { adminSecret: adminSecret.trim() });
+  };
+
+  const updateOption = (index: number, value: string) => {
+    const next = [...options];
+    next[index] = value;
+    setOptions(next);
+    if (answer === options[index]?.trim()) setAnswer("");
   };
 
   const handleAuth = (e: React.FormEvent) => {
@@ -170,6 +208,37 @@ export default function AdminPage() {
             <h2 className="mb-4 text-lg font-semibold uppercase tracking-wider text-foreground">Launch Question</h2>
             <form onSubmit={handleLaunch} className="space-y-4">
               <div>
+                <label className="mb-2 block text-sm font-medium text-muted-foreground">Question type</label>
+                <div className="flex gap-4">
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <input
+                      type="radio"
+                      name="questionType"
+                      checked={questionType === "text"}
+                      onChange={() => {
+                        setQuestionType("text");
+                        setAnswer("");
+                      }}
+                      className="h-4 w-4 accent-primary"
+                    />
+                    <span>Text answer</span>
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <input
+                      type="radio"
+                      name="questionType"
+                      checked={questionType === "multiple_choice"}
+                      onChange={() => {
+                        setQuestionType("multiple_choice");
+                        setAnswer("");
+                      }}
+                      className="h-4 w-4 accent-primary"
+                    />
+                    <span>Multiple choice</span>
+                  </label>
+                </div>
+              </div>
+              <div>
                 <label className="mb-1 block text-sm font-medium text-muted-foreground">Question</label>
                 <textarea
                   placeholder="e.g. What is the capital of France?"
@@ -180,17 +249,44 @@ export default function AdminPage() {
                   required
                 />
               </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-muted-foreground">Correct Answer</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Paris"
-                  value={answer}
-                  onChange={(e) => setAnswer(e.target.value)}
-                  className="w-full rounded-lg border border-input bg-background px-4 py-3 text-foreground outline-none transition placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
-                  required
-                />
-              </div>
+              {questionType === "text" ? (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-muted-foreground">Correct Answer</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Paris"
+                    value={answer}
+                    onChange={(e) => setAnswer(e.target.value)}
+                    className="w-full rounded-lg border border-input bg-background px-4 py-3 text-foreground outline-none transition placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
+                  />
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <label className="block text-sm font-medium text-muted-foreground">Options (select correct answer)</label>
+                  {OPTION_LETTERS.map((letter, i) => (
+                    <div key={letter} className="flex items-center gap-3">
+                      <span className="w-6 font-medium text-muted-foreground">{letter})</span>
+                      <input
+                        type="text"
+                        placeholder={`Option ${letter}`}
+                        value={options[i]}
+                        onChange={(e) => updateOption(i, e.target.value)}
+                        className="flex-1 rounded-lg border border-input bg-background px-4 py-2 text-foreground outline-none transition placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
+                      />
+                      <label className="flex shrink-0 items-center gap-1">
+                        <input
+                          type="radio"
+                          name="correctOption"
+                          checked={answer === options[i]?.trim()}
+                          onChange={() => options[i]?.trim() && setAnswer(options[i].trim())}
+                          className="h-4 w-4 accent-primary"
+                        />
+                        <span className="text-xs text-muted-foreground">Correct</span>
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              )}
               <button
                 type="submit"
                 className="w-full rounded-lg bg-primary py-3 font-semibold text-primary-foreground shadow-md transition hover:opacity-90"
@@ -199,6 +295,20 @@ export default function AdminPage() {
               </button>
             </form>
           </div>
+        </div>
+
+        <div className="mb-8 rounded-2xl border border-destructive/30 bg-destructive/5 p-6">
+          <h2 className="mb-2 text-lg font-semibold uppercase tracking-wider text-foreground">New Competition</h2>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Reset all participant scores to zero. Use this when starting a fresh round.
+          </p>
+          <button
+            type="button"
+            onClick={handleStartNewCompetition}
+            className="rounded-lg bg-destructive px-6 py-2 font-medium text-destructive-foreground transition hover:opacity-90"
+          >
+            Start New Competition
+          </button>
         </div>
 
         <p className="text-sm text-muted-foreground">
